@@ -1,0 +1,59 @@
+#!/bin/bash
+
+echo "tracie: Tracing I/O on Executables"
+echo "v1.0, released 2020-08-15"
+echo "Developed by CsokiCraft"
+echo "tracie is free software; see LICENSE"
+
+traciemon(){
+    ch=\n # just for init stuff
+    while [ "x$ch" != "x" ] ; do
+        read -N1 ch;
+        echo -ne "$1$ch"
+        if [ "x$2" != "x" ] ; then
+            echo -n $ch >>$2
+        fi
+    done
+}
+
+while getopts "hw:r:t:N" i; do
+    case $i in
+        w) WRITEFILE=$OPTARG ;;
+        r) READFILE=$OPTARG ;;
+        t) TARGET=$OPTARG ;;
+        N) NOMONI=1 ;;
+        :) echo "Missing arg for -$OPTARG" >&2; exit 1 ;;
+        h)
+            echo "$0: front-end for tracie.so"
+            echo "Usage: $0 [-w file] [-r file] [-N] -t <target> <program>"
+            echo -e "-w\t\tSave write()'s (PC -> serial bus) to file"
+            echo -e "-r\t\tSave read()'s (PC <- serial bus) to file"
+            echo -e "-N\t\tDo not monitor serial I/O; wait for an external program to connect"
+            echo -e "-t\t\tSet targeted file to be I/O traced"
+        ;;
+    esac
+done
+
+shift $((OPTIND-1))
+PROG=$1
+
+if [ "x$PROG" = "x" ] ; then
+    echo "Please specify the program to run!" >&2
+    exit 1
+fi
+
+if [ "x$TARGET" = "x" ] ; then
+    echo "No TRACIE_TARGET set! Use the '-t <file>' arg." >&2
+fi
+
+mkfifo /tmp/tracie-pipe-w
+mkfifo /tmp/tracie-pipe-r
+
+if [ "x$NOMONI" = "x" ] ; then
+    traciemon "\033[31m" $WRITEFILE </tmp/tracie-pipe-w &
+    traciemon "\033[32m" $READFILE </tmp/tracie-pipe-r &
+fi
+
+LD_PRELOAD=./tracie.so TRACIE_TARGET="$TARGET" $PROG
+
+rm /tmp/tracie-pipe-*
